@@ -13,10 +13,10 @@
 #include <WiFiUdp.h>            // For running OTA
 #include <ArduinoOTA.h>         // For running OTA
 #include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
-#include <LuaWrapper.h>
 
 
 #define PIXEL_PIN    4 //
+#define PIEZO_PIN  A0  // Piezo attached to Analog A0 on Wemos or Gemma D2 (A1)
 
 #define PIXEL_COUNT 100  // Number of NeoPixels
 
@@ -43,6 +43,7 @@ boolean ledState = LOW;   // Used for blinking LEDs when WifiManager in Connecti
 // State of the light and it's color
 uint8_t gLightBrightness = 100;
 int gColor = 0;
+int gThreshold = 100;
 
 // global variables to hold the animation
 //uint8_t gFrameIndex = 0;
@@ -75,11 +76,11 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       break;
     case WStype_TEXT:
       Serial.printf("[%u] get Text: %s\n", num, payload);
-
-      if (payload[0] == '#')
-      {
-        gColor = string2color((const char *)payload);
-      }
+      gThreshold = (int)payload;
+//      if (payload[0] == '#')
+//      {
+//        gColor = string2color((const char *)payload);
+//      }
       break;
 
     default:
@@ -97,6 +98,7 @@ static const char MAIN_PAGE[] PROGMEM = R"====(
 var light_on = false;
 var light_color = '#000000';
 var light_brightness = 100;
+var threshold_setpoint = 100;
 
 var connection = new WebSocket('ws://'+location.hostname+':81/', ['arduino']);
   
@@ -104,24 +106,6 @@ connection.onopen = function () {  connection.send('Connect ' + new Date()); };
 connection.onerror = function (error) {    console.log('WebSocket Error ', error);};
 connection.onmessage = function (e) {  console.log('Server: ', e.data);};
 
-
-//
-// Print an Error message
-//
-function displayError (errorMessage) {
-  document.getElementById('errors').style.visibility = 'visible';
-  document.getElementById('errors').innerHTML = document.getElementById('errors').innerHTML + errorMessage + '<BR>';
-  
-}
-
-//
-// Print a Debug message
-//
-function displayDebug (debugMessage) {
-  document.getElementById('debug').style.visibility = 'visible';
-  document.getElementById('debug').innerHTML = document.getElementById('debug').innerHTML + debugMessage + '<BR>';
-  
-}
 
 //
 // Function to make a REST call
@@ -161,7 +145,7 @@ function restCall(httpMethod, url, cFunction, bodyText=null) {
     }
   })
   .catch((err) => {
-    displayError(err.message);
+    console.log(err.message);
   });
 }
 
@@ -184,7 +168,7 @@ function statusLoaded (jsonResponse) {
     document.getElementById('light_state').innerHTML = 'OFF';
     document.getElementById('light_button').value = 'Turn Light ON';
     document.getElementById('state').style.color = '#000000';
-
+  }
 }
 
 
@@ -200,21 +184,6 @@ function changeLight() {
     // Light is off -> turn it on
     restCall('PUT', '/light', statusLoaded);
   }
-}
-
-
-//
-// Increase the light brightness
-//
-function increaseBrightness() {
-  restCall('PUT', '/brightness?up', statusLoaded);
-}
-
-//
-// Decrease the light brightness
-//
-function decreaseBrightness() {
-  restCall('PUT', '/brightness?down', statusLoaded);
 }
 
 //
@@ -234,17 +203,11 @@ function doOnLoad() {
   restCall('GET', '/light', statusLoaded);
 }
 
-function sendRGB() {  
-    var r = parseInt(document.getElementById('r').value).toString(16);  
-    var g = parseInt(document.getElementById('g').value).toString(16);  
-    var b = parseInt(document.getElementById('b').value).toString(16);  
-    if(r.length < 2) { r = '0' + r; }   
-    if(g.length < 2) { g = '0' + g; }   
-    if(b.length < 2) { b = '0' + b; }   
-    var rgb = '#'+r+g+b;   
-
-  console.log('RGB: ' + rgb); 
-  connection.send(rgb); 
+function sendThreshold() {  
+  var threshold = document.getElementById('threshold').value;  
+  console.log('Threshold Set Point: ' + threshold); 
+  document.getElementById('threshold_setpoint').innerHTML = threshold;
+  connection.send(threshold); 
 }
 
   
@@ -255,36 +218,27 @@ function sendRGB() {
 <BR>
 <BR>
 Light is currently <span id='light_state'></span><BR>
-Brightness is currently set to <span id='brightness_state'></span><BR>
+Threshold is currently set to <span id='threshold_setpoint'></span><BR>
 <HR style='margin-top: 20px; margin-bottom: 10px;'>
 <form>
 <DIV style='overflow: hidden; margin-top: 10px; margin-bottom: 10px;'>
   <DIV style='text-align: center; float: left;'>
     <label for='light_button'>Change Light:</label><BR>
     <input type='button' id='light_button' name='light_state' style='width: 160px; height: 40px; margin-bottom: 10px;' onClick='changeLight();'><BR>
-\  </DIV>
+  </DIV>
   <DIV style='text-align: center; overflow: hidden;'>
     <label for='light_color'>New Light Color:</label><BR>
     <input type='color' id='light_color' name='light_color' style='width: 120px; height: 40px; margin-bottom: 10px;'><BR>
     <input type='button' id='set_light_color' name='set_light_color' style='width: 120px; height: 40px;' value='Set Color' onClick='setLightColor();'><BR>
   </DIV>
   <DIV>
-  LED Control:<br><br>
-  Red: <input id="r" type="range" min="0" max="255" step="1" oninput="sendRGB();" ><br>
-  Green: <input id="g" type="range" min="0" max="255" step="1" oninput="sendRGB();" ><br>
-  Blue: <input id="b" type="range" min="0" max="255" step="1" oninput="sendRGB();" ><br>
-  Brightness:  <input id="brightnessSlide" type="range" min="0" max="100" step="1"><BR>
+  Threshold Control:<br><br>
+  Threshold: <input id="threshold" type="range" min="0" max="255" step="1" oninput="sendThreshold();" ><br>
   </DIV>
 </DIV>
 </form>
-<HR style='margin-top: 10px; margin-bottom: 10px;'>
-<DIV id='debug' style='font-family: monospace; color:blue; outline-style: solid; outline-color:blue; outline-width: 2px; visibility: hidden; padding-top: 10px; padding-bottom: 10px; margin-top: 10px; margin-bottom: 10px;'></DIV><BR>
-<DIV id='errors' style='color:red; outline-style: solid; outline-color:red; outline-width: 2px; visibility: hidden; padding-top: 10px; padding-bottom: 10px; margin-top: 10px; margin-bottom: 10px;'></DIV><BR>
 </BODY>
-<SCRIPT>
 
-
-</SCRIPT>
 </HTML>
 )====";
 
@@ -402,13 +356,22 @@ void setup() {
  *************************************************/
 void loop() {
   // Handle any requests
-  ArduinoOTA.handle();
+  // ArduinoOTA.handle();
   webSocket.loop();
   server.handleClient();
+  handleSensorReading();
   //MDNS.update();
 
 }
 
+void handleSensorReading() {    
+  if (analogRead(PIEZO_PIN) >= gThreshold) {
+    turnLightOn();
+  }
+  else {
+    turnLightOff();
+  }
+}
 
 /******************************
  * Callback Utilities during setup
@@ -416,7 +379,7 @@ void loop() {
 
 /*
  * Blink the LED Strip.
- * If on  then turn off
+ * If on  then turn of
  * If off then turn on
  */
 void tick()
@@ -441,6 +404,22 @@ void configModeCallback (WiFiManager *myWiFiManager) {
   //Serial.println(myWiFiManager->getConfigPortalSSID());
   //entered config mode, make led toggle faster
   ticker.attach(0.2, tick);
+}
+
+/*
+ * Turn the Light on to the color specified
+ */
+
+void turnLightOn() {
+  colorSet(gColor);
+}
+
+
+/*
+ * Turn the Light off
+ */
+void turnLightOff() {
+  colorSet(strip.Color(  0,   0,   0));    // Black/off
 }
 
 
