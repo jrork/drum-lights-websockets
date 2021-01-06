@@ -15,10 +15,10 @@
 #include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
 
 
-#define PIXEL_PIN    4 //
+#define PIXEL_PIN    D6 //
 #define PIEZO_PIN  A0  // Piezo attached to Analog A0 on Wemos or Gemma D2 (A1)
 
-#define PIXEL_COUNT 100  // Number of NeoPixels
+#define PIXEL_COUNT 13  // Number of NeoPixels
 
 // Device Info
 const char* devicename = "DrumTest";
@@ -42,7 +42,7 @@ boolean ledState = LOW;   // Used for blinking LEDs when WifiManager in Connecti
 
 // State of the light and it's color
 uint8_t gLightBrightness = 100;
-int gColor = 0;
+int gColor = 65234;
 int gThreshold = 100;
 
 // global variables to hold the animation
@@ -263,7 +263,7 @@ void setup() {
   // wm.resetSettings();    // reset settings - for testing
 
   // Set static IP to see if it fixes my problem - joe
-  IPAddress _ip = IPAddress(192, 168, 1, 14);
+  IPAddress _ip = IPAddress(192, 168, 1, 13);
   IPAddress _gw = IPAddress(192, 168, 1, 1);
   IPAddress _sn = IPAddress(255, 255, 255, 0);
   wm.setSTAStaticIPConfig(_ip, _gw, _sn);
@@ -365,11 +365,16 @@ void loop() {
 }
 
 void handleSensorReading() {    
-  if (analogRead(PIEZO_PIN) >= gThreshold) {
+  int sensorReading = analogRead(PIEZO_PIN);
+  if ( sensorReading >= gThreshold) {
+    Serial.printf("Turing light on for sensor reading %i against threshold %i\n", sensorReading, gThreshold);
     turnLightOn();
+    delay(50);
   }
   else {
+    //Serial.println("Turning light off");
     turnLightOff();
+    delay(50);
   }
 }
 
