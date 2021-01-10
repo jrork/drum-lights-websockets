@@ -13,7 +13,8 @@
 #include <WiFiUdp.h>            // For running OTA
 #include <ArduinoOTA.h>         // For running OTA
 #include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
-
+#include <EEPROM.h>
+#include "drums.h"
 
 #define PIXEL_PIN    D6 //
 #define PIEZO_PIN  A0  // Piezo attached to Analog A0 on Wemos or Gemma D2 (A1)
@@ -40,22 +41,21 @@ Adafruit_NeoPixel strip(PIXEL_COUNT, PIXEL_PIN, NEO_BRG + NEO_KHZ400);
 Ticker ticker;
 boolean ledState = LOW;   // Used for blinking LEDs when WifiManager in Connecting and Configuring
 
+//typedef struct drumLight Drumlight;
+
 // State of the light and it's color
-uint8_t gLightBrightness = 100;
-int gColor = 65234;
-int gThreshold = 100;
+//uint8_t gLightBrightness = 100;
+//int gColor = 65234;
+//int gThreshold = 100;
 
-// global variables to hold the animation
-//uint8_t gFrameIndex = 0;
-//uint32_t gDelayTimeLeft = 0;
-//uint8_t gNoOfFrames = 0;
-//DynamicJsonDocument gRequestDoc(8500);
-
+drumLight myDrumLight;
 
 // For Web Server
 ESP8266WebServer server(80);
 WebSocketsServer webSocket = WebSocketsServer(81);
-uint8_t connectedClient = 0;
+//uint8_t connectedClient = 0;
+uint8_t connectedClients[20];
+uint8_t connectedClientCount = 0;
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length)
 {
@@ -64,23 +64,38 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
     case WStype_DISCONNECTED:
       Serial.printf("[%u] Disconnected!\n", num);
       break;
-      
+
     case WStype_CONNECTED:
       {
         IPAddress ip = webSocket.remoteIP(num);
         Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
-        connectedClient = num;
+        connectedClients[connectedClientCount] = num;
         // send message to client
         webSocket.sendTXT(num, "Connected");
       }
       break;
     case WStype_TEXT:
-      Serial.printf("[%u] get Text: %s\n", num, payload);
-      gThreshold = (int)payload;
-//      if (payload[0] == '#')
-//      {
-//        gColor = string2color((const char *)payload);
-//      }
+      {
+        StaticJsonDocument<200> requestDoc;
+        DeserializationError error = deserializeJson(requestDoc, payload);
+        //      DeserializationError error = deserializeJson(requestDoc, server.arg("plain"));
+        if (error) {
+          //      server.send(400, "text/plain", "Bad Request - Parsing JSON Body Failed");
+          //      return false;
+        }
+        if (requestDoc.containsKey("color")) {
+          String colorStr = requestDoc["color"];
+          myDrumLight.color = string2color(colorStr);
+        }
+        if (requestDoc.containsKey("threshold")) {
+          myDrumLight.threshold = requestDoc["threshold"];
+          //need to add bounds and error checking here
+        }
+        if (requestDoc.containsKey("saveValues")) {
+          saveValues();
+          //need to add bounds and error checking here
+        }
+      }
       break;
 
     default:
@@ -95,10 +110,14 @@ static const char MAIN_PAGE[] PROGMEM = R"====(
 <link rel="icon" href="data:,">
 <SCRIPT>
 
-var light_on = false;
+var drumId = 0;
 var light_color = '#000000';
 var light_brightness = 100;
 var threshold_setpoint = 100;
+var delay_value = 20;
+var triggerMode = 0;
+
+var light_on = false;
 
 var connection = new WebSocket('ws://'+location.hostname+':81/', ['arduino']);
   
@@ -106,7 +125,23 @@ connection.onopen = function () {  connection.send('Connect ' + new Date()); };
 connection.onerror = function (error) {    console.log('WebSocket Error ', error);};
 connection.onmessage = function (e) {  console.log('Server: ', e.data);};
 
+//
+// Print an Error message
+//
+function displayError (errorMessage) {
+  document.getElementById('errors').style.visibility = 'visible';
+  document.getElementById('errors').innerHTML = document.getElementById('errors').innerHTML + errorMessage + '<BR>';
+  
+}
 
+//
+// Print a Debug message
+//
+function displayDebug (debugMessage) {
+  document.getElementById('debug').style.visibility = 'visible';
+  document.getElementById('debug').innerHTML = document.getElementById('debug').innerHTML + debugMessage + '<BR>';
+  
+}
 //
 // Function to make a REST call
 //
@@ -154,21 +189,27 @@ function restCall(httpMethod, url, cFunction, bodyText=null) {
 // Handling displaying the current status
 //
 function statusLoaded (jsonResponse) {
-  light_on = jsonResponse.lightOn;
+  console.log("statusLoaded");
+  drumId = jsonResponse.drumId;
+  //light_on = jsonResponse.lightOn;
   light_color = jsonResponse.color;
-  light_brightness = jsonResponse.brightnessValue;
+  light_brightness = jsonResponse.lightBrightness;
+  threshold_setpoint = jsonResponse.threshold;
+  delay_value = jsonResponse.delayValue; 
+  triggerMode = jsonResponse.triggerMode;
+  
   document.getElementById('light_color').value = light_color;
 
   if (light_on) {
     document.getElementById('light_state').innerHTML = 'ON';
     document.getElementById('light_button').value = 'Turn Light OFF';
-    document.getElementById('state').style.color = light_color;
   }
   else {
     document.getElementById('light_state').innerHTML = 'OFF';
     document.getElementById('light_button').value = 'Turn Light ON';
-    document.getElementById('state').style.color = '#000000';
   }
+
+  console.log("DrumID" + drumId + " " + light_color);
 }
 
 
@@ -192,9 +233,18 @@ function changeLight() {
 function setLightColor() {
   var postObj = new Object();
   postObj.color = document.getElementById('light_color').value;
-  restCall('POST', '/light', statusLoaded, JSON.stringify(postObj));
+  //restCall('POST', '/light', statusLoaded, JSON.stringify(postObj));
+  connection.send(JSON.stringify(postObj));
 }
 
+//
+// Save the values to EEPROM
+//
+function saveValuesToEEPROM() {
+  var postObj = new Object();
+  postObj.saveValues = 1;
+  connection.send(JSON.stringify(postObj));
+}
 
 //
 // actions to perform when the page is loaded
@@ -207,7 +257,9 @@ function sendThreshold() {
   var threshold = document.getElementById('threshold').value;  
   console.log('Threshold Set Point: ' + threshold); 
   document.getElementById('threshold_setpoint').innerHTML = threshold;
-  connection.send(threshold); 
+  var postObj = new Object();
+  postObj.threshold = threshold;
+  connection.send(JSON.stringify(postObj)); 
 }
 
   
@@ -237,6 +289,10 @@ Threshold is currently set to <span id='threshold_setpoint'></span><BR>
   </DIV>
 </DIV>
 </form>
+<HR style='margin-top: 10px; margin-bottom: 10px;'>
+<DIV id='debug' style='font-family: monospace; color:blue; outline-style: solid; outline-color:blue; outline-width: 2px; visibility: hidden; padding-top: 10px; padding-bottom: 10px; margin-top: 10px; margin-bottom: 10px;'></DIV><BR>
+<DIV id='errors' style='color:red; outline-style: solid; outline-color:red; outline-width: 2px; visibility: hidden; padding-top: 10px; padding-bottom: 10px; margin-top: 10px; margin-bottom: 10px;'></DIV><BR>
+
 </BODY>
 
 </HTML>
@@ -337,17 +393,30 @@ void setup() {
   server.begin();
   //Serial.println("HTTP server started");
 
+  //
+  // Read saved values from the EEPROM
+  //
+  EEPROM.begin(sizeof(myDrumLight));
+  char* myDrumLightBytes = reinterpret_cast<char*>(&myDrumLight);
+  const uint32_t myDrumLightSize = sizeof(myDrumLight);
+  
+  EEPROM.begin(myDrumLightSize);  //Initialize EEPROM
 
-
+  for(int index = 0; index < myDrumLightSize; index++){
+    myDrumLightBytes[index] = EEPROM.read(index);
+  }
+  memcpy(&myDrumLight, myDrumLightBytes, sizeof(drumLight));
+  
   //
   // Done with Setup
   //
   ticker.detach();          // Stop blinking the LED strip
   colorSet(strip.Color(  0, 255,   0)); // Use Green to indicate the setup is done.
-  pinMode(2, OUTPUT);
-  digitalWrite(2, HIGH);
+
   delay(2000);
   colorSet(strip.Color(0,0,0));
+
+  MDNS.update();
 }
 
 
@@ -356,7 +425,7 @@ void setup() {
  *************************************************/
 void loop() {
   // Handle any requests
-  // ArduinoOTA.handle();
+  ArduinoOTA.handle();
   webSocket.loop();
   server.handleClient();
   handleSensorReading();
@@ -366,8 +435,9 @@ void loop() {
 
 void handleSensorReading() {    
   int sensorReading = analogRead(PIEZO_PIN);
-  if ( sensorReading >= gThreshold) {
-    Serial.printf("Turing light on for sensor reading %i against threshold %i\n", sensorReading, gThreshold);
+  //Serial.printf("Sensor reading %i; Threshold %i\n", sensorReading, gThreshold);
+  if ( sensorReading >= myDrumLight.threshold) {
+    //Serial.printf("Turing light on for sensor reading %i against threshold %i\n", sensorReading, gThreshold);
     turnLightOn();
     delay(50);
   }
@@ -416,7 +486,7 @@ void configModeCallback (WiFiManager *myWiFiManager) {
  */
 
 void turnLightOn() {
-  colorSet(gColor);
+  colorSet(myDrumLight.color);
 }
 
 
@@ -430,15 +500,16 @@ void turnLightOff() {
 
 void setBrightnessValue(uint8_t bright_value) {
   int mappedValue = map(bright_value%255, 0, 100, 1, 254);
-  gLightBrightness = mappedValue;
-  Serial.printf("Setting brightness value to %i\n", gLightBrightness);
+  //gLightBrightness = mappedValue;
+  myDrumLight.brightness = mappedValue;
+  //Serial.printf("Setting brightness value to %i\n", gLightBrightness);
   strip.setBrightness(mappedValue);  //valid brightness values are 0<->255
   
   //Adding test websocket send code here
   char msg_buf[10];
   sprintf(msg_buf, "%d", mappedValue);
-  Serial.printf("Sending to [%u]: %s\n", connectedClient, msg_buf);
-  webSocket.sendTXT(connectedClient, msg_buf);
+  Serial.printf("Sending to [%u]: %s\n", connectedClients[0], msg_buf);
+  webSocket.sendTXT(connectedClients[0], msg_buf);
 }
 
 
@@ -452,6 +523,19 @@ void colorSet(uint32_t color) {
   strip.show();                          //  Update strip to match
 }
 
+void saveValues() {
+  Serial.println("Saving values to EEPROM");
+    char* myDrumLightBytes = reinterpret_cast<char*>(&myDrumLight);
+    const uint32_t myDrumLightSize = sizeof(myDrumLight);
+
+  EEPROM.begin(myDrumLightSize);  //Initialize EEPROM
+
+  for(int index = 0; index < myDrumLightSize; index++){
+    EEPROM.write(index, myDrumLightBytes[index]);
+  }
+  
+  EEPROM.commit();    //Store data to EEPROM
+}
 
 
 /******************************************
@@ -514,17 +598,20 @@ void handleBrightness() {
 void sendStatus() {
   DynamicJsonDocument jsonDoc(1024);
 
-  // Send back current state of Light
-  jsonDoc["lightBrightness"] = gLightBrightness;
-
-  // Send back current state of Color
+  jsonDoc["drumId"] = myDrumLight.drumId;
   String currColorStr = "";
   color2String(&currColorStr);
   jsonDoc["color"] = currColorStr;
+  jsonDoc["lightBrightness"] = myDrumLight.brightness;
+  jsonDoc["threshold"] = myDrumLight.threshold;
+  jsonDoc["delayValue"] = myDrumLight.delayValue;
+  jsonDoc["triggerMode"] = myDrumLight.triggerMode;
 
   String payload;
   serializeJson(jsonDoc, payload);
   server.send(200, "application/json", payload);
+
+  webSocket.sendTXT(connectedClients[0], payload);
 }
 
 //
@@ -546,7 +633,8 @@ boolean setLightColor() {
     return false;
   }
   String colorStr = requestDoc["color"];
-  gColor = string2color(colorStr);
+  myDrumLight.color = string2color(colorStr);
+  sendStatus();
   return true;
 }
 
@@ -572,6 +660,7 @@ boolean setBrightness() {
   uint8_t brightnessValue = requestDoc["brightnessValue"];
   setBrightnessValue(brightnessValue);
   strip.show();
+  sendStatus();
   return true;
 }
 
@@ -598,7 +687,7 @@ void handleNotFound() {
 // Convert uint32_t color to web #RRGGBB string
 //
 void color2String (String* colorString) {
-  uint32_t pixelColor = gColor & 0xFFFFFF; // remove any extra settings - only want RGB
+  uint32_t pixelColor = myDrumLight.color & 0xFFFFFF; // remove any extra settings - only want RGB
   colorString->concat("#000000" + String(pixelColor,HEX));
   colorString->setCharAt(colorString->length()-7, '#');
   colorString->remove(0,colorString->length()-7);
