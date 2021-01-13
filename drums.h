@@ -58,4 +58,5 @@ struct drumLight {
   uint32_t threshold;
   uint8_t delayValue;
   uint8_t triggerMode;
+  uint8_t pixelCount;
 };

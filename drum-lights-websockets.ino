@@ -27,7 +27,9 @@ const char* devicepassword = "onairadmin";
 
 // Declare NeoPixel strip object:
 // Adafruit_NeoPixel strip(PIXEL_COUNT, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel strip(PIXEL_COUNT, PIXEL_PIN, NEO_BRG + NEO_KHZ400);
+//Adafruit_NeoPixel strip;
+Adafruit_NeoPixel strip(PIXEL_COUNT, PIXEL_PIN, NEO_BRG + NEO_KHZ400); //<--- use this one
+
 // Argument 1 = Number of pixels in NeoPixel strip
 // Argument 2 = Arduino pin number (most are valid)
 // Argument 3 = Pixel type flags, add together as needed:
@@ -301,9 +303,10 @@ void setup() {
   Serial.printf("Threshold value after EEPROM read: %i\n", myDrumLight.threshold);
   Serial.printf("Delay time value after EEPROM read: %i\n", myDrumLight.delayValue);
   Serial.printf("Trigger Mode value after EEPROM read: %i\n", myDrumLight.triggerMode);
+  Serial.printf("Pixel count value after EEPROM read: %i\n", myDrumLight.pixelCount);
 
   devicename = DrumText[myDrumLight.drumId];
-
+  strip.updateLength(myDrumLight.pixelCount);
   strip.begin(); // Initialize NeoPixel strip object (REQUIRED)
   strip.show();  // Initialize all pixels to 'off'
   ticker.attach(0.6, tick); // start ticker to slow blink LED strip during Setup
@@ -410,7 +413,7 @@ void setup() {
  *************************************************/
 void loop() {
   // Handle any requests
-  ArduinoOTA.handle();
+  //ArduinoOTA.handle();
   webSocket.loop();
   server.handleClient();
   handleSensorReading();
