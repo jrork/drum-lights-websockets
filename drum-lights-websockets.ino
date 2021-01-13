@@ -141,78 +141,15 @@ var connection = new WebSocket('ws://'+location.hostname+':81/', ['arduino']);
   
 connection.onopen = function () {  connection.send('Connect ' + new Date()); }; 
 connection.onerror = function (error) {    console.log('WebSocket Error ', error);};
-//connection.onmessage = function (e) {  console.log('Server: ', e.data);};
 connection.onmessage = function (e) {  
-  //console.log(e);
   statusLoaded(e.data);
   };
-
-//
-// Print an Error message
-//
-function displayError (errorMessage) {
-  document.getElementById('errors').style.visibility = 'visible';
-  document.getElementById('errors').innerHTML = document.getElementById('errors').innerHTML + errorMessage + '<BR>';
-  
-}
-
-//
-// Print a Debug message
-//
-function displayDebug (debugMessage) {
-  document.getElementById('debug').style.visibility = 'visible';
-  document.getElementById('debug').innerHTML = document.getElementById('debug').innerHTML + debugMessage + '<BR>';
-  
-}
-//
-// Function to make a REST call
-//
-function restCall(httpMethod, url, cFunction, bodyText=null) {
-  contentType = 'text/plain';
-  if (httpMethod == 'POST') {
-    contentType = 'application/json';
-  }
-  fetch (url, {
-    method: httpMethod,
-    headers: {
-      'Content-Type': contentType
-    },
-    body: bodyText,
-  })
-  .then (response => {
-    // Check Response Status
-    if (!response.ok) {
-      throw new Error('Error response: ' + response.status + ' ' + response.statusText);
-    }
-    return response;
-  })
-  .then (response => {
-    // process JSON response
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      throw new TypeError("No JSON returned!");
-    }
-    return response.json();
-  })
-  .then (jsonData => {
-    // Send JSON to callback function if present
-    if (cFunction != undefined) {
-      displayDebug(JSON.stringify(jsonData));
-      cFunction(jsonData);
-    }
-  })
-  .catch((err) => {
-    console.log(err.message);
-  });
-}
-
 
 //
 // Handling displaying the current status
 //
 function statusLoaded(jsonResponse) {
   console.log(jsonResponse);
-//  displayDebug(JSON.stringify(jsonResponse));
   var obj = JSON.parse(jsonResponse);
   drumId = obj.drumId;
   light_color = obj.color;
@@ -221,47 +158,23 @@ function statusLoaded(jsonResponse) {
   delay_value = obj.delayValue; 
   triggerMode = obj.triggerMode;
   
+  document.getElementById('drumIdCombo').value = drumId;
   document.getElementById('light_color').value = light_color;
   document.getElementById('brightness').value = light_brightness;
-  document.getElementById('threshold_setpoint').value = threshold_setpoint;
-
+  document.getElementById('brightness_label').innerHTML = light_brightness;
+  document.getElementById('threshold').value = threshold_setpoint;     
   document.getElementById('threshold_setpoint').innerHTML = threshold_setpoint;
   document.getElementById('color_label').innerHTML = light_color;
-  document.getElementById('brightness_label').innterHTML = light_brightness;
-//  
-//  if (light_on) {
-//    document.getElementById('light_state').innerHTML = 'ON';
-//    document.getElementById('light_button').value = 'Turn Light OFF';
-//  }
-//  else {
-//    document.getElementById('light_state').innerHTML = 'OFF';
-//    document.getElementById('light_button').value = 'Turn Light ON';
-//  }
 }
 
 
 //
-// Turn the Light on or off
+// Send the Drum Id
 //
-function changeLight() {
-  if (light_on) {
-    // Light is on -> turn it off
-    restCall('DELETE', '/light', statusLoaded);
-  }
-  else {
-    // Light is off -> turn it on
-    restCall('PUT', '/light', statusLoaded);
-  }
-}
-
-//
-// Set the color of the light
-//
-function setLightColor() {
+function sendDrumId() {
   var postObj = new Object();
-  postObj.color = document.getElementById('light_color').value;
+  postObj.drumId = document.getElementById('drumIdCombo').value;
   connection.send(JSON.stringify(postObj));
-//  restCall('POST', '/light', statusLoaded, JSON.stringify(postObj));
 }
 
 //
@@ -286,15 +199,14 @@ function saveValuesToEEPROM() {
 // actions to perform when the page is loaded
 //
 function doOnLoad() {
-//  restCall('GET', '/light', statusLoaded);
   var postObj = new Object();
   postObj.getStatus = 1;
-  connection.send(JSON.stringify(postObj));
+  setTimeout(() => {connection.send(JSON.stringify(postObj));}, 1000)
 }
 
 function sendBrightness() {  
   var brightness = document.getElementById('brightness').value;  
-  //console.log('Brightness Value: ' + brightness); 
+  document.getElementById('brightness_label').innerHTML = brightness;
   var postObj = new Object();
   postObj.brightness = brightness;
   connection.send(JSON.stringify(postObj)); 
@@ -312,40 +224,51 @@ function sendThreshold() {
 </SCRIPT>
 </HEAD>
 <BODY style='max-width: 960px; margin: auto;' onload='doOnLoad();'>
-<CENTER><H1>Redline Drum Management Page</H1></CENTER>
-<BR>
-<BR>
-Light is currently <span id='light_state'></span><BR>
+
 Threshold is currently set to <span id='threshold_setpoint'></span><BR>
 Color is currently set to <span id='color_label'></span><BR>
 Brightness is currently set to <span id='brightness_label'></span><BR>
-
-<HR style='margin-top: 20px; margin-bottom: 10px;'>
 <form>
+<select id="drumIdCombo", onchange="sendDrumId();">
+  <option value="0">Bass 1</option>
+  <option value="1">Bass 2</option>
+  <option value="2">Bass 3</option>
+  <option value="3">Bass 4</option>
+  <option value="4">Bass 5</option>
+  <option value="5">Bass 6</option>
+  <option value="6">Bass 7</option>
+  <option value="7">Bass 8</option>
+  <option value="8">Snare 1</option>
+  <option value="9">Snare 2</option>
+  <option value="10">Snare 3</option>
+  <option value="11">Snare 4</option>
+  <option value="12">Snare 5</option>
+  <option value="13">Snare 6</option>
+  <option value="14">Snare 7</option>
+  <option value="15">Snare 8</option>
+  <option value="16">Snare 9</option>
+  <option value="17">Snare 10</option>
+  <option value="18">Kit Snare</option>
+  <option value="19">Kit High Tom</option>
+  <option value="20">Kit Low Tom</option>
+  <option value="21">Kit Floor Tom</option>
+  <option value="22">Kit Kick</option>
+</select>
 <DIV style='overflow: hidden; margin-top: 10px; margin-bottom: 10px;'>
-  <DIV style='text-align: center; float: left;'>
-    <label for='light_button'>Change Light:</label><BR>
-    <input type='button' id='light_button' name='light_state' style='width: 160px; height: 40px; margin-bottom: 10px;' onClick='changeLight();'><BR>
-  </DIV>
-  <DIV style='text-align: center; overflow: hidden;'>
-    <label for='light_color'>New Light Color:</label><BR>
+  <DIV>
     <input type='color' id='light_color' name='light_color' style='width: 120px; height: 40px; margin-bottom: 10px;' oninput="sendLightColor();"><BR>
-    <input type='button' id='set_light_color' name='set_light_color' style='width: 120px; height: 40px;' value='Set Color'><BR>
-  </DIV>
-    <DIV style='text-align: center; overflow: hidden;'>
-    Brightness:<BR>
-    <input id="brightness" type="range" min="0" max="255" step="1" oninput="sendBrightness();" ><BR>
   </DIV>
   <DIV>
-  Threshold Control:<br><br>
-  Threshold: <input id="threshold" type="range" min="0" max="255" step="1" oninput="sendThreshold();" ><br>
+    Brightness: <input id="brightness" type="range" min="0" max="255" step="1" oninput="sendBrightness();" ><BR>
+  </DIV>
+  <DIV>
+    Threshold: <input id="threshold" type="range" min="0" max="255" step="1" oninput="sendThreshold();" ><br>
+  </DIV>
+  <DIV>
+    <input type='button' id='eeprom_button' value="Save"; style='width: 160px; height: 40px; margin-bottom: 10px;' onClick='saveValuesToEEPROM();'><BR>
   </DIV>
 </DIV>
 </form>
-<HR style='margin-top: 10px; margin-bottom: 10px;'>
-<DIV id='debug' style='font-family: monospace; color:blue; outline-style: solid; outline-color:blue; outline-width: 2px; visibility: hidden; padding-top: 10px; padding-bottom: 10px; margin-top: 10px; margin-bottom: 10px;'></DIV><BR>
-<DIV id='errors' style='color:red; outline-style: solid; outline-color:red; outline-width: 2px; visibility: hidden; padding-top: 10px; padding-bottom: 10px; margin-top: 10px; margin-bottom: 10px;'></DIV><BR>
-
 </BODY>
 
 </HTML>
@@ -372,7 +295,14 @@ void setup() {
   }
   memcpy(&myDrumLight, myDrumLightBytes, sizeof(drumLight));
 
+  Serial.printf("Drum id after EEPROM read: %s\n", DrumText[myDrumLight.drumId]);
+  Serial.printf("Color value after EEPROM read: %d\n", myDrumLight.color);
+  Serial.printf("Brightness value after EEPROM read: %i\n", myDrumLight.brightness);
+  Serial.printf("Threshold value after EEPROM read: %i\n", myDrumLight.threshold);
+  Serial.printf("Delay time value after EEPROM read: %i\n", myDrumLight.delayValue);
+  Serial.printf("Trigger Mode value after EEPROM read: %i\n", myDrumLight.triggerMode);
 
+  devicename = DrumText[myDrumLight.drumId];
 
   strip.begin(); // Initialize NeoPixel strip object (REQUIRED)
   strip.show();  // Initialize all pixels to 'off'
@@ -466,7 +396,7 @@ void setup() {
   // Done with Setup
   //
   ticker.detach();          // Stop blinking the LED strip
-  colorSet(strip.Color(  0, 255,   0)); // Use Green to indicate the setup is done.
+  colorSet(strip.Color(0, 255,0)); // Use Green to indicate the setup is done.
 
   delay(2000);
   colorSet(strip.Color(0,0,0));
@@ -528,10 +458,7 @@ void tick()
  * gets called when WiFiManager enters configuration mode
  */
 void configModeCallback (WiFiManager *myWiFiManager) {
-  //Serial.println("Entered config mode");
-  //Serial.println(WiFi.softAPIP());
-  //if you used auto generated SSID, print it
-  //Serial.println(myWiFiManager->getConfigPortalSSID());
+
   //entered config mode, make led toggle faster
   ticker.attach(0.2, tick);
 }
@@ -561,9 +488,9 @@ void setBrightnessValue(uint8_t bright_value) {
   strip.setBrightness(mappedValue);  //valid brightness values are 0<->255
   
   //Adding test websocket send code here
-  char msg_buf[100];
-  sprintf(msg_buf, "New Brightness value %d", mappedValue);
-  Serial.printf("Sending to [%u]: %s\n", connectedClients[connectedClientCount], msg_buf);
+  //char msg_buf[100];
+  //sprintf(msg_buf, "New Brightness value %d", mappedValue);
+  //Serial.printf("Sending to [%u]: %s\n", connectedClients[connectedClientCount], msg_buf);
   //sendStatus();
 }
 
