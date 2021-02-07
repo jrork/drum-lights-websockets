@@ -6,19 +6,20 @@
 #include <WebSocketsServer_Generic.h>
 
 #include <Adafruit_NeoPixel.h>  // For controling the Light Strip
-#include <WiFiManager.h>        // For managing the Wifi Connection by TZAPU
 #include <ESP8266WiFi.h>        // For running the Web Server
 #include <ESP8266WebServer.h>   // For running the Web Server
 #include <ESP8266mDNS.h>        // For running OTA and Web Server
+#include <WiFiManager.h>        // For managing the Wifi Connection by TZAPU
 #include <WiFiUdp.h>            // For running OTA
 #include <ArduinoOTA.h>         // For running OTA
 #include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
 #include <EEPROM.h>
 #include "drums.h"
+#include "modes.h"
 
 #define PIXEL_PIN    D6 //
 #define PIEZO_PIN  A0  // Piezo attached to Analog A0 on Wemos or Gemma D2 (A1)
-
+#define BUTTON_PIN D3 
 #define PIXEL_COUNT 13  // Number of NeoPixels
 
 // Device Info
@@ -43,15 +44,21 @@ Adafruit_NeoPixel strip(PIXEL_COUNT, PIXEL_PIN, NEO_BRG + NEO_KHZ400); //<--- us
 Ticker ticker;
 boolean ledState = LOW;   // Used for blinking LEDs when WifiManager in Connecting and Configuring
 
-//typedef struct drumLight Drumlight;
-
-// State of the light and it's color
-//uint8_t gLightBrightness = 100;
-//int gColor = 65234;
-//int gThreshold = 100;
+struct drumLight {
+  drumID drumId;
+  uint32_t color;
+  uint8_t brightness;
+  uint32_t threshold;
+  uint8_t delayValue;
+  modeID triggerMode;
+  uint8_t pixelCount;
+};
 
 drumLight myDrumLight;
-
+volatile modeID gTriggerMode = setupMode;
+volatile uint32_t interruptMills = millis() ;
+uint8_t interruptDebounce = 150;
+ 
 // For Web Server
 ESP8266WebServer server(80);
 WebSocketsServer webSocket = WebSocketsServer(81);
@@ -286,12 +293,14 @@ void setup() {
   //
   // Read saved values from the EEPROM
   //
-  EEPROM.begin(sizeof(myDrumLight));
+//  EEPROM.begin(sizeof(myDrumLight));
+//  char* myDrumLightBytes = reinterpret_cast<char*>(&myDrumLight);
+//  const uint32_t myDrumLightSize = sizeof(myDrumLight);
+//  
+//  EEPROM.begin(myDrumLightSize);  //Initialize EEPROM
   char* myDrumLightBytes = reinterpret_cast<char*>(&myDrumLight);
   const uint32_t myDrumLightSize = sizeof(myDrumLight);
-  
-  EEPROM.begin(myDrumLightSize);  //Initialize EEPROM
-
+  EEPROM.begin(myDrumLightSize);  
   for(int index = 0; index < myDrumLightSize; index++){
     myDrumLightBytes[index] = EEPROM.read(index);
   }
@@ -303,8 +312,11 @@ void setup() {
   Serial.printf("Threshold value after EEPROM read: %i\n", myDrumLight.threshold);
   Serial.printf("Delay time value after EEPROM read: %i\n", myDrumLight.delayValue);
   Serial.printf("Trigger Mode value after EEPROM read: %i\n", myDrumLight.triggerMode);
+  Serial.printf("Trigger Mode value after EEPROM read: %s\n", ModeText[myDrumLight.triggerMode]);
   Serial.printf("Pixel count value after EEPROM read: %i\n", myDrumLight.pixelCount);
-
+  Serial.printf("MAC: ");
+  Serial.println(WiFi.macAddress());
+  
   devicename = DrumText[myDrumLight.drumId];
   strip.updateLength(myDrumLight.pixelCount);
   strip.begin(); // Initialize NeoPixel strip object (REQUIRED)
@@ -394,7 +406,8 @@ void setup() {
   server.begin();
   //Serial.println("HTTP server started");
 
-  
+  attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), handleInterrupt, FALLING);
+
   //
   // Done with Setup
   //
@@ -412,18 +425,37 @@ void setup() {
  * Loop
  *************************************************/
 void loop() {
-  // Handle any requests
-  //ArduinoOTA.handle();
-  webSocket.loop();
-  server.handleClient();
-  handleSensorReading();
-  //MDNS.update();
+  //Serial.println(ModeText[gTriggerMode]);
+  switch(gTriggerMode){
+    case(offMode):
+    //Serial.print("Doing nothing\n");
+      break;
+   case(lightOnHitMode):
+      handleSensorReading();
+      break;
+   case(setupMode):
+        // Handle any requests
+        ArduinoOTA.handle();
+        webSocket.loop();
+        server.handleClient();
+        handleSensorReading();
+        //MDNS.update();
+      break;
+   default:
+        // Handle any requests
+        ArduinoOTA.handle();
+        webSocket.loop();
+        server.handleClient();
+        handleSensorReading();
+        //MDNS.update();
+  }
+
 
 }
 
 void handleSensorReading() {    
   int sensorReading = analogRead(PIEZO_PIN);
-  //Serial.printf("Sensor reading %i; Threshold %i\n", sensorReading, gThreshold);
+  //Serial.printf("Sensor reading %i; Threshold %i\n", sensorReading, myDrumLight.threshold);
   if ( sensorReading >= myDrumLight.threshold) {
     //Serial.printf("Turing light on for sensor reading %i against threshold %i\n", sensorReading, gThreshold);
     turnLightOn();
@@ -436,6 +468,17 @@ void handleSensorReading() {
   }
 }
 
+ICACHE_RAM_ATTR void handleInterrupt() {
+  if ((millis() - interruptMills) >= interruptDebounce) {
+    if (gTriggerMode != myDrumLight.triggerMode) {
+        gTriggerMode = myDrumLight.triggerMode;
+      }
+      else {
+        gTriggerMode = offMode;
+      }
+      interruptMills = millis();
+   }
+}
 /******************************
  * Callback Utilities during setup
  ******************************/

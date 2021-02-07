@@ -50,13 +50,3 @@ char *DrumText[] =
   "KitFloorTom",
   "KitKick"
 };
-
-struct drumLight {
-  drumID drumId;
-  uint32_t color;
-  uint8_t brightness;
-  uint32_t threshold;
-  uint8_t delayValue;
-  uint8_t triggerMode;
-  uint8_t pixelCount;
-};
