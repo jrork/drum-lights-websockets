@@ -1,8 +1,13 @@
-// Lily's Board LED control
+// This code is totally horrible.  Don't use it.  I use it as a playground and have
+// all kinds of really screwed up methods of doing things, mostly sticking to whatever
+// approach was being done in the code I copied for that section.  It does very little 
+// error checking, if any.  This makes Frankenstien's Monster look like a CG cover.
+// YOU'VE BEEN WARNED
+// License: You have no permission to use this.  Regardless, any code that would matter 
+// to you is from somewhere else that has a license you can use.
 // Light up the strip of 100 WS2811s around a board
 // Webpage also available to control board
-// Rest interface that supports simple commands, JSON animation, and loading
-// of LUA scripts also available
+
 #include <WebSocketsServer_Generic.h>
 
 #include <Adafruit_NeoPixel.h>  // For controling the Light Strip
@@ -24,7 +29,7 @@
 
 // Device Info
 const char* devicename = "DrumTest";
-const char* devicepassword = "onairadmin";
+const char* devicepassword = "redline1";
 
 // Declare NeoPixel strip object:
 // Adafruit_NeoPixel strip(PIXEL_COUNT, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
@@ -151,20 +156,71 @@ var triggerMode = 0;
 
 var light_on = false;
 
-var connection = new WebSocket('ws://'+location.hostname+':81/', ['arduino']);
+//in the process of removing the websockets
+//var connection = new WebSocket('ws://'+location.hostname+':81/', ['arduino']);
+//  
+//connection.onopen = function () {  connection.send('Connect ' + new Date()); }; 
+//connection.onerror = function (error) {    console.log('WebSocket Error ', error);};
+//connection.onmessage = function (e) {  
+//  statusLoaded(e.data);
+//  };
   
-connection.onopen = function () {  connection.send('Connect ' + new Date()); }; 
-connection.onerror = function (error) {    console.log('WebSocket Error ', error);};
-connection.onmessage = function (e) {  
-  statusLoaded(e.data);
-  };
-
+//
+// Function to make a REST call
+//
+ function restCall(httpMethod, url, cFunction, bodyText=null) {
+   contentType = 'text/plain';
+   if (httpMethod == 'POST') {
+     contentType = 'application/json';
+   }
+   fetch (url, {
+     method: httpMethod,
+     headers: {
+       'Content-Type': contentType
+     },
+     body: bodyText,
+   })
+   .then (response => {
+     // Check Response Status
+     if (!response.ok) {
+       throw new Error('Error response: ' + response.status + ' ' + response.statusText);
+     }
+     return response;
+   })
+   .then (response => {
+     // process JSON response
+     const contentType = response.headers.get('content-type');
+     if (!contentType || !contentType.includes('application/json')) {
+       throw new TypeError("No JSON returned!");
+     }
+     return response.json();
+   })
+   .then (jsonData => {
+     // Send JSON to callback function if present
+     if (cFunction != undefined) {
+       console.log(JSON.stringify(jsonData));
+       cFunction(jsonData);
+     }
+   })
+   .catch((err) => {
+     console.log(err.message);
+   });
+ }
+ 
 //
 // Handling displaying the current status
 //
 function statusLoaded(jsonResponse) {
   console.log(jsonResponse);
-  var obj = JSON.parse(jsonResponse);
+}
+
+//
+// Handling displaying the current status
+//
+function initialStatusLoaded(jsonResponse) {
+  console.log(jsonResponse);
+  var obj = jsonResponse;
+//  var obj = JSON.parse(jsonResponse);
   drumId = obj.drumId;
   light_color = obj.color;
   light_brightness = obj.lightBrightness;
@@ -179,8 +235,18 @@ function statusLoaded(jsonResponse) {
   document.getElementById('threshold').value = threshold_setpoint;     
   document.getElementById('threshold_setpoint').innerHTML = threshold_setpoint;
   document.getElementById('color_label').innerHTML = light_color;
+  document.getElementById('delayValue_label').innerHTML = delay_value;
 }
+//
+// Send the Delay Value
+//
+function sendDelayValue() {
+  var postObj = new Object();
+  postObj.delayValue = document.getElementById('delayValue').value;
+//  connection.send(JSON.stringify(postObj));
+  restCall('POST', '/delayValue', statusLoaded, JSON.stringify(postObj));  
 
+}
 
 //
 // Send the Drum Id
@@ -188,16 +254,21 @@ function statusLoaded(jsonResponse) {
 function sendDrumId() {
   var postObj = new Object();
   postObj.drumId = document.getElementById('drumIdCombo').value;
-  connection.send(JSON.stringify(postObj));
+//  connection.send(JSON.stringify(postObj));
+  restCall('POST', '/drumID', statusLoaded, JSON.stringify(postObj));  
+
 }
 
 //
 // Send the color of the light
 //
 function sendLightColor() {
+  var color = document.getElementById('light_color').value;  
+  //document.getElementById('color_label').innerHTML = color;
   var postObj = new Object();
-  postObj.color = document.getElementById('light_color').value;
-  connection.send(JSON.stringify(postObj));
+  postObj.color = color;
+//  connection.send(JSON.stringify(postObj));
+  restCall('POST', '/light', statusLoaded, JSON.stringify(postObj));  
 }
 
 //
@@ -207,33 +278,45 @@ function saveValuesToEEPROM() {
   var postObj = new Object();
   postObj.saveValues = 1;
   connection.send(JSON.stringify(postObj));
+  restCall('POST', '/eeprom', statusLoaded, JSON.stringify(postObj));  
+}
+
+//
+// actions to perform when the page is loaded - this is the websocket version
+//
+//function doOnLoad() {
+//  var postObj = new Object();
+//  postObj.getStatus = 1;
+//  setTimeout(() => {connection.send(JSON.stringify(postObj));}, 1000)
+//}
+
+
+
+function sendBrightness() {  
+  var brightness = document.getElementById('brightness').value;  
+  //document.getElementById('brightness_label').innerHTML = brightness;
+  var postObj = new Object();
+  postObj.brightness = brightness;
+//  connection.send(JSON.stringify(postObj)); 
+  restCall('POST', '/brightness', statusLoaded, JSON.stringify(postObj));
+
+}
+
+function sendThreshold() {  
+  var threshold = document.getElementById('threshold').value;  
+  //document.getElementById('threshold_setpoint').innerHTML = threshold;
+  var postObj = new Object();
+  postObj.threshold = threshold;
+  //connection.send(JSON.stringify(postObj)); 
+  restCall('POST', '/threshold', statusLoaded, JSON.stringify(postObj));
 }
 
 //
 // actions to perform when the page is loaded
 //
 function doOnLoad() {
-  var postObj = new Object();
-  postObj.getStatus = 1;
-  setTimeout(() => {connection.send(JSON.stringify(postObj));}, 1000)
+  restCall('GET', '/light', initialStatusLoaded);
 }
-
-function sendBrightness() {  
-  var brightness = document.getElementById('brightness').value;  
-  document.getElementById('brightness_label').innerHTML = brightness;
-  var postObj = new Object();
-  postObj.brightness = brightness;
-  connection.send(JSON.stringify(postObj)); 
-}
-
-function sendThreshold() {  
-  var threshold = document.getElementById('threshold').value;  
-  document.getElementById('threshold_setpoint').innerHTML = threshold;
-  var postObj = new Object();
-  postObj.threshold = threshold;
-  connection.send(JSON.stringify(postObj)); 
-}
-
   
 </SCRIPT>
 </HEAD>
@@ -273,7 +356,7 @@ Brightness is currently set to <span id='brightness_label'></span><BR>
     <input type='color' id='light_color' name='light_color' style='width: 120px; height: 40px; margin-bottom: 10px;' oninput="sendLightColor();"><BR>
   </DIV>
   <DIV>
-    Brightness: <input id="brightness" type="range" min="0" max="255" step="1" oninput="sendBrightness();" ><BR>
+    Brightness: <input id="brightness" type="range" min="0" max="100" step="1" oninput="sendBrightness();" ><BR>
   </DIV>
   <DIV>
     Threshold: <input id="threshold" type="range" min="0" max="255" step="1" oninput="sendThreshold();" ><br>
@@ -337,20 +420,24 @@ void setup() {
   // wm.resetSettings();    // reset settings - for testing
 
   // Set static IP to see if it fixes my problem - joe
-  IPAddress _ip = IPAddress(192, 168, 1, 13);
-  IPAddress _gw = IPAddress(192, 168, 1, 1);
-  IPAddress _sn = IPAddress(255, 255, 255, 0);
-  wm.setSTAStaticIPConfig(_ip, _gw, _sn);
-  
-  wm.setAPCallback(configModeCallback); //set callback that gets called when connecting to previous WiFi fails, and enters Access Point mode
-  //if it does not connect it starts an access point with the specified name here  "AutoConnectAP"
-  if (!wm.autoConnect()) {
-    //Serial.println("failed to connect and hit timeout");
-    //reset and try again, or maybe put it to deep sleep
-    ESP.restart();
-    delay(1000);
-  }
-  Serial.println("connected");
+//  IPAddress _ip = IPAddress(192, 168, 1, 13);
+//  IPAddress _gw = IPAddress(192, 168, 1, 1);
+//  IPAddress _sn = IPAddress(255, 255, 255, 0);
+//  wm.setSTAStaticIPConfig(_ip, _gw, _sn);
+//  
+//  wm.setAPCallback(configModeCallback); //set callback that gets called when connecting to previous WiFi fails, and enters Access Point mode
+//  //if it does not connect it starts an access point with the specified name here  "AutoConnectAP"
+//  if (!wm.autoConnect(devicename)) {
+//    //Serial.println("failed to connect and hit timeout");
+//    //reset and try again, or maybe put it to deep sleep
+////    ESP.restart();
+////    delay(1000);
+//    WiFi.softAP(devicename, devicepassword);
+//  }
+//  Serial.println("connected");
+
+    WiFi.softAP(devicename, devicepassword);
+
 
   // start webSocket server
   webSocket.begin();
@@ -359,6 +446,7 @@ void setup() {
   //
   // Set up the Multicast DNS
   //
+  
   MDNS.begin(devicename);
 
 
@@ -407,6 +495,10 @@ void setup() {
   server.on("/", handleRoot);
   server.on("/light", handleLight);
   server.on("/brightness", handleBrightness);
+  server.on("/threshold", handleThreshold);
+  server.on("/eeprom", handleEEPROM);
+  server.on("/drumID", handleDrumID);
+  server.on("/delayValue", handleDelayValue);
   server.onNotFound(handleNotFound);
   server.begin();
   //Serial.println("HTTP server started");
@@ -470,12 +562,12 @@ void handleSensorReading() {
   if ( sensorReading >= myDrumLight.threshold) {
     //Serial.printf("Turing light on for sensor reading %i against threshold %i\n", sensorReading, gThreshold);
     turnLightOn();
-    delay(50);
+    delay(myDrumLight.delayValue);
   }
   else {
     //Serial.println("Turning light off");
     turnLightOff();
-    delay(50);
+    delay(myDrumLight.delayValue);
   }
 }
 void handleBroadcastMode() {    
@@ -485,23 +577,23 @@ void handleBroadcastMode() {
     broadcastUdp.beginPacket(broadcastIp, broadcastPort);
     broadcastUdp.print((byte)1);
     broadcastUdp.endPacket();
-    delay(50);
+    delay(myDrumLight.delayValue);
   }
   else {
     //Serial.println("Turning light off");
     turnLightOff();
-    delay(50);
+    delay(myDrumLight.delayValue);
   }
 }
 void handleRemoteTriggerMode() {   
     broadcastUdp.read(broadcastBuffer, UDP_TX_PACKET_MAX_SIZE);
     if(broadcastBuffer[0]) {
       turnLightOn();
-      delay(50);
+      delay(myDrumLight.delayValue);
     }
     else {
       turnLightOff();
-      delay(50);
+      delay(myDrumLight.delayValue);
     }
 
 }
@@ -568,7 +660,7 @@ void setBrightnessValue(uint8_t bright_value) {
   int mappedValue = map(bright_value%255, 0, 100, 1, 254);
   //gLightBrightness = mappedValue;
   myDrumLight.brightness = mappedValue;
-  //Serial.printf("Setting brightness value to %i\n", gLightBrightness);
+  Serial.printf("Setting brightness value to %i, %i\n", myDrumLight.brightness, bright_value);
   strip.setBrightness(mappedValue);  //valid brightness values are 0<->255
   
   //Adding test websocket send code here
@@ -620,6 +712,7 @@ void handleRoot() {
 // Handle service for Light
 //
 void handleLight() {
+  Serial.println("Handling Light");
   switch (server.method()) {
     case HTTP_POST:
       if (setLightColor()) {
@@ -657,7 +750,121 @@ void handleBrightness() {
   }
 }
 
-  
+//
+// Handle service for Threshold
+//
+void handleThreshold() {
+  if ((!server.hasArg("plain")) || (server.arg("plain").length() == 0)) {
+    server.send(400, "text/plain", "Bad Request - Missing Body");
+  }
+  StaticJsonDocument<200> requestDoc;
+  DeserializationError error = deserializeJson(requestDoc, server.arg("plain"));
+  if (error) {
+    server.send(400, "text/plain", "Bad Request - Parsing JSON Body Failed");
+  }
+  switch (server.method()) {
+    case HTTP_POST:
+      if (requestDoc.containsKey("threshold")) {
+        myDrumLight.threshold = requestDoc["threshold"];
+        sendStatus();
+      }
+      break;
+      
+    case HTTP_GET:
+      sendStatus();
+      break;
+    default:
+      server.send(405, "text/plain", "Method Not Allowed");
+      break;
+  }
+}
+
+//
+// Handle service for EEPROM
+//
+void handleEEPROM() {
+  if ((!server.hasArg("plain")) || (server.arg("plain").length() == 0)) {
+    server.send(400, "text/plain", "Bad Request - Missing Body");
+  }
+  StaticJsonDocument<200> requestDoc;
+  DeserializationError error = deserializeJson(requestDoc, server.arg("plain"));
+  if (error) {
+    server.send(400, "text/plain", "Bad Request - Parsing JSON Body Failed");
+  }
+  switch (server.method()) {
+    case HTTP_POST:
+      if (requestDoc.containsKey("saveValues")) {
+            saveValues();
+            sendStatus();
+      }
+      break;
+      
+    case HTTP_GET:
+      sendStatus();
+      break;
+    default:
+      server.send(405, "text/plain", "Method Not Allowed");
+      break;
+  }
+}
+
+//
+// Handle service for DrumID
+//
+void handleDrumID() {
+  if ((!server.hasArg("plain")) || (server.arg("plain").length() == 0)) {
+    server.send(400, "text/plain", "Bad Request - Missing Body");
+  }
+  StaticJsonDocument<200> requestDoc;
+  DeserializationError error = deserializeJson(requestDoc, server.arg("plain"));
+  if (error) {
+    server.send(400, "text/plain", "Bad Request - Parsing JSON Body Failed");
+  }
+  switch (server.method()) {
+    case HTTP_POST:
+     if (requestDoc.containsKey("drumId")) {
+       myDrumLight.drumId = requestDoc["drumId"];
+       sendStatus();
+      }
+      break;
+      
+    case HTTP_GET:
+      sendStatus();
+      break;
+    default:
+      server.send(405, "text/plain", "Method Not Allowed");
+      break;
+  }
+}
+ 
+//
+// Handle service for DrumID
+//
+void handleDelayValue() {
+  if ((!server.hasArg("plain")) || (server.arg("plain").length() == 0)) {
+    server.send(400, "text/plain", "Bad Request - Missing Body");
+  }
+  StaticJsonDocument<200> requestDoc;
+  DeserializationError error = deserializeJson(requestDoc, server.arg("plain"));
+  if (error) {
+    server.send(400, "text/plain", "Bad Request - Parsing JSON Body Failed");
+  }
+  switch (server.method()) {
+    case HTTP_POST:
+      if (requestDoc.containsKey("saveValues")) {
+            saveValues();
+            sendStatus();
+      }
+      break;
+      
+    case HTTP_GET:
+      sendStatus();
+      break;
+    default:
+      server.send(405, "text/plain", "Method Not Allowed");
+      break;
+  }
+} 
 //
 // Handle returning the status of the strip
 //
@@ -708,6 +915,7 @@ boolean setLightColor() {
 // Handle setting a brightness 
 //
 boolean setBrightness() {
+  Serial.println("Changing Brightness");
   if ((!server.hasArg("plain")) || (server.arg("plain").length() == 0)) {
     server.send(400, "text/plain", "Bad Request - Missing Body");
     return false;
@@ -718,12 +926,12 @@ boolean setBrightness() {
     server.send(400, "text/plain", "Bad Request - Parsing JSON Body Failed");
     return false;
   }
-  if (!requestDoc.containsKey("brightnessValue")) {
+  if (!requestDoc.containsKey("brightness")) {
     server.send(400, "text/plain", "Bad Request - Missing Brightness Argument");
     return false;
   }
   
-  uint8_t brightnessValue = requestDoc["brightnessValue"];
+  uint8_t brightnessValue = requestDoc["brightness"];
   setBrightnessValue(brightnessValue);
   strip.show();
   //sendStatus();
