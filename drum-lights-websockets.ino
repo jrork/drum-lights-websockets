@@ -66,6 +66,11 @@ WebSocketsServer webSocket = WebSocketsServer(81);
 uint8_t connectedClients[20];
 uint8_t connectedClientCount = 0;
 
+WiFiUDP broadcastUdp;
+unsigned int broadcastPort = 6789;
+IPAddress broadcastIp(192,168,1,255);
+char broadcastBuffer[UDP_TX_PACKET_MAX_SIZE];
+
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length)
 {
   switch (type)
@@ -441,6 +446,12 @@ void loop() {
         handleSensorReading();
         //MDNS.update();
       break;
+   case(broadcast):
+      handleBroadcastMode();
+      break;   
+   case(remoteTrigger):
+      handleRemoteTriggerMode();
+      break;
    default:
         // Handle any requests
         ArduinoOTA.handle();
@@ -466,6 +477,33 @@ void handleSensorReading() {
     turnLightOff();
     delay(50);
   }
+}
+void handleBroadcastMode() {    
+  int sensorReading = analogRead(PIEZO_PIN);
+  if ( sensorReading >= myDrumLight.threshold) {
+    turnLightOn();
+    broadcastUdp.beginPacket(broadcastIp, broadcastPort);
+    broadcastUdp.print((byte)1);
+    broadcastUdp.endPacket();
+    delay(50);
+  }
+  else {
+    //Serial.println("Turning light off");
+    turnLightOff();
+    delay(50);
+  }
+}
+void handleRemoteTriggerMode() {   
+    broadcastUdp.read(broadcastBuffer, UDP_TX_PACKET_MAX_SIZE);
+    if(broadcastBuffer[0]) {
+      turnLightOn();
+      delay(50);
+    }
+    else {
+      turnLightOff();
+      delay(50);
+    }
+
 }
 
 ICACHE_RAM_ATTR void handleInterrupt() {

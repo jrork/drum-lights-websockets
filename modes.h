@@ -1,12 +1,16 @@
 enum modeID {
   offMode,
   setupMode,
-  lightOnHitMode
+  lightOnHitMode,
+  broadcast,
+  remoteTrigger
 };
 
 char *ModeText[] =
 {
   "Off",
   "Setup",
-  "LightOnHit"
+  "LightOnHit",
+  "Broadcasting",
+  "RemoteTrigger"
 };
