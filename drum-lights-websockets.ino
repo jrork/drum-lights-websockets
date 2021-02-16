@@ -8,7 +8,7 @@
 // Light up the strip of 100 WS2811s around a board
 // Webpage also available to control board
 
-#include <WebSocketsServer_Generic.h>
+//#include <WebSocketsServer_Generic.h>
 
 #include <Adafruit_NeoPixel.h>  // For controling the Light Strip
 #include <ESP8266WiFi.h>        // For running the Web Server
@@ -66,7 +66,7 @@ uint8_t interruptDebounce = 150;
  
 // For Web Server
 ESP8266WebServer server(80);
-WebSocketsServer webSocket = WebSocketsServer(81);
+//WebSocketsServer webSocket = WebSocketsServer(81);
 //uint8_t connectedClient = 0;
 uint8_t connectedClients[20];
 uint8_t connectedClientCount = 0;
@@ -76,69 +76,69 @@ unsigned int broadcastPort = 6789;
 IPAddress broadcastIp(192,168,1,255);
 char broadcastBuffer[UDP_TX_PACKET_MAX_SIZE];
 
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length)
-{
-  switch (type)
-  {
-    case WStype_DISCONNECTED:
-      Serial.printf("[%u] Disconnected!\n", num);
-      break;
-
-    case WStype_CONNECTED:
-      {
-        IPAddress ip = webSocket.remoteIP(num);
-        Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
-        connectedClients[connectedClientCount] = num;
-        Serial.printf("connectedClientCount is: %i, %i\n", connectedClients[connectedClientCount], connectedClientCount);
-        // send message to client
-        //webSocket.sendTXT(connectedClients[connectedClientCount], "Connected");
-      }
-      break;
-    case WStype_TEXT:
-      {
-        StaticJsonDocument<200> requestDoc;
-        DeserializationError error = deserializeJson(requestDoc, payload);
-        //      DeserializationError error = deserializeJson(requestDoc, server.arg("plain"));
-        if (error) {
-          //      server.send(400, "text/plain", "Bad Request - Parsing JSON Body Failed");
-          //      return false;
-        }
-   
-        if (requestDoc.containsKey("drumId")) {
-          myDrumLight.drumId = requestDoc["drumId"];
-        }    
-        if (requestDoc.containsKey("color")) {
-          String colorStr = requestDoc["color"];
-          myDrumLight.color = string2color(colorStr);
-        }
-        if (requestDoc.containsKey("threshold")) {
-          myDrumLight.threshold = requestDoc["threshold"];
-          //need to add bounds and error checking here
-        }
-        if (requestDoc.containsKey("brightness")) {
-          myDrumLight.brightness = requestDoc["brightness"];
-          setBrightnessValue(myDrumLight.brightness);
-          //need to add bounds and error checking here
-        }
-        if (requestDoc.containsKey("delayValue")) {
-          myDrumLight.drumId = requestDoc["delayValue"];
-        }
-        if (requestDoc.containsKey("triggerMode")) {
-          myDrumLight.drumId = requestDoc["triggerMode"];
-        }
-        if (requestDoc.containsKey("getStatus")) {
-            sendStatus();
-        }
-        if (requestDoc.containsKey("saveValues")) {
-            saveValues();
-        }
-      }
-      break;
-
-    default:
-      break;
-  }
-}
+//void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length)
+//{
+//  switch (type)
+//  {
+//    case WStype_DISCONNECTED:
+//      Serial.printf("[%u] Disconnected!\n", num);
+//      break;
+//
+//    case WStype_CONNECTED:
+//      {
+//        IPAddress ip = webSocket.remoteIP(num);
+//        Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
+//        connectedClients[connectedClientCount] = num;
+//        Serial.printf("connectedClientCount is: %i, %i\n", connectedClients[connectedClientCount], connectedClientCount);
+//        // send message to client
+//        //webSocket.sendTXT(connectedClients[connectedClientCount], "Connected");
+//      }
+//      break;
+//    case WStype_TEXT:
+//      {
+//        StaticJsonDocument<200> requestDoc;
+//        DeserializationError error = deserializeJson(requestDoc, payload);
+//        //      DeserializationError error = deserializeJson(requestDoc, server.arg("plain"));
+//        if (error) {
+//          //      server.send(400, "text/plain", "Bad Request - Parsing JSON Body Failed");
+//          //      return false;
+//        }
+//   
+//        if (requestDoc.containsKey("drumId")) {
+//          myDrumLight.drumId = requestDoc["drumId"];
+//        }    
+//        if (requestDoc.containsKey("color")) {
+//          String colorStr = requestDoc["color"];
+//          myDrumLight.color = string2color(colorStr);
+//        }
+//        if (requestDoc.containsKey("threshold")) {
+//          myDrumLight.threshold = requestDoc["threshold"];
+//          //need to add bounds and error checking here
+//        }
+//        if (requestDoc.containsKey("brightness")) {
+//          myDrumLight.brightness = requestDoc["brightness"];
+//          setBrightnessValue(myDrumLight.brightness);
+//          //need to add bounds and error checking here
+//        }
+//        if (requestDoc.containsKey("delayValue")) {
+//          myDrumLight.drumId = requestDoc["delayValue"];
+//        }
+//        if (requestDoc.containsKey("triggerMode")) {
+//          myDrumLight.drumId = requestDoc["triggerMode"];
+//        }
+//        if (requestDoc.containsKey("getStatus")) {
+//            sendStatus();
+//        }
+//        if (requestDoc.containsKey("saveValues")) {
+//            saveValues();
+//        }
+//      }
+//      break;
+//
+//    default:
+//      break;
+//  }
+//}
 
 // Main Page
 static const char MAIN_PAGE[] PROGMEM = R"====(
@@ -439,9 +439,9 @@ void setup() {
     WiFi.softAP(devicename, devicepassword);
 
 
-  // start webSocket server
-  webSocket.begin();
-  webSocket.onEvent(webSocketEvent);
+//  // start webSocket server
+//  webSocket.begin();
+//  webSocket.onEvent(webSocketEvent);
 
   //
   // Set up the Multicast DNS
@@ -533,7 +533,7 @@ void loop() {
    case(setupMode):
         // Handle any requests
         ArduinoOTA.handle();
-        webSocket.loop();
+//        webSocket.loop();
         server.handleClient();
         handleSensorReading();
         //MDNS.update();
@@ -547,7 +547,7 @@ void loop() {
    default:
         // Handle any requests
         ArduinoOTA.handle();
-        webSocket.loop();
+//        webSocket.loop();
         server.handleClient();
         handleSensorReading();
         //MDNS.update();
@@ -884,7 +884,7 @@ void sendStatus() {
   serializeJson(jsonDoc, payload);
   server.send(200, "application/json", payload);
 
-  webSocket.sendTXT(connectedClients[0], payload);
+//  webSocket.sendTXT(connectedClients[0], payload);
 }
 
 //
