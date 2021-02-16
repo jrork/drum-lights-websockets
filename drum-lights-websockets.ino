@@ -264,7 +264,7 @@ function sendDrumId() {
 //
 function sendLightColor() {
   var color = document.getElementById('light_color').value;  
-  //document.getElementById('color_label').innerHTML = color;
+  document.getElementById('color_label').innerHTML = color;
   var postObj = new Object();
   postObj.color = color;
 //  connection.send(JSON.stringify(postObj));
@@ -294,7 +294,7 @@ function saveValuesToEEPROM() {
 
 function sendBrightness() {  
   var brightness = document.getElementById('brightness').value;  
-  //document.getElementById('brightness_label').innerHTML = brightness;
+  document.getElementById('brightness_label').innerHTML = brightness;
   var postObj = new Object();
   postObj.brightness = brightness;
 //  connection.send(JSON.stringify(postObj)); 
@@ -304,7 +304,7 @@ function sendBrightness() {
 
 function sendThreshold() {  
   var threshold = document.getElementById('threshold').value;  
-  //document.getElementById('threshold_setpoint').innerHTML = threshold;
+  document.getElementById('threshold_setpoint').innerHTML = threshold;
   var postObj = new Object();
   postObj.threshold = threshold;
   //connection.send(JSON.stringify(postObj)); 
