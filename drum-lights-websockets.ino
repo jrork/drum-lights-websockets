@@ -144,6 +144,7 @@ char broadcastBuffer[UDP_TX_PACKET_MAX_SIZE];
 static const char MAIN_PAGE[] PROGMEM = R"====(
 <HTML>
 <HEAD>
+<meta name="viewport" content="width=device-width, initial-scale=1" /> 
 <link rel="icon" href="data:,">
 <SCRIPT>
 
