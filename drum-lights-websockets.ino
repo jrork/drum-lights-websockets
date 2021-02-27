@@ -1,14 +1,41 @@
+// How to use this code:
+// To initaize, you need to use a differetn program, DrumLightEEPROMwrite.  That program
+// populates the variables in EEPROM that are then read in by this program and used to 
+// in setup for this program.  The values that are used can be overwritten by this program, 
+// so they don't have to be correct.  In fact, you may be able to use this without the other 
+// program, but I'm not sure what will happen if the EEPROM is either empty or full of 
+// other stuff so better to be safe.
+// Next, load this code, and search WiFi for the name that was initialized by the write
+// program, something like 'Bass1'.  Connect to that endpoint, and set your browser to 
+// 192.168.4.1.  The AP will require a password, which is set in the 'devicepassword' 
+// variable below.  This page does contain a reference to WiFiManger which is commented out
+// because it does not work properly on my home network.  Your results may vary.  If you want 
+// to have the drums on the same network (and perhaps talking to one another), uncomment the 
+// WiFiManger code and use that instead.
+// The interrupt button is meant to 'change modes' with the idea being that the board will 
+// initialize in 'setup mode' which contains OTA, web server, etc.  Clicking the button will 
+// then put the loop into 'off' mode, and clicking it once again would put it in whatever
+// mode was set in EERPOM.  The intention was to create an interface in the HTML page to allow
+// swithing that last mode via the webpage, but I didn't need to use that functionality for my 
+// last project so I never got around to finishing that interface.  I did, however, include a 
+// couple more modes that was planned to use one drum to trigger the lights on others, which 
+// is the 'broadcasting' and 'remote trigger' modes.  broadcasting would be the drum that is hit
+// and sending out the hit, and the 'remote trigger' drums would listen for that hit and 
+// trigger the lights.  That functionality was only bench tested but could be cool.  Broadcast
+// logic assumes network IP is 192.168.1.XXX
+// There are two .h files that I used to describe different data structures; drums.h and 
+// modes.h.  Adding additional drums would need to happen both in this file as well as in the 
+// HTML interface in the dropdown if you want to use that. 
+// The REST interface has a ton of replication and if I had time, I'd clean that up and combine
+// the different calls.  From an efficiency standpoint I don't think it matters.
+// 
 // This code is totally horrible.  Don't use it.  I use it as a playground and have
 // all kinds of really screwed up methods of doing things, mostly sticking to whatever
 // approach was being done in the code I copied for that section.  It does very little 
 // error checking, if any.  This makes Frankenstien's Monster look like a CG cover.
 // YOU'VE BEEN WARNED
-// License: You have no permission to use this.  Regardless, any code that would matter 
-// to you is from somewhere else that has a license you can use.
 // Light up the strip of 100 WS2811s around a board
 // Webpage also available to control board
-
-//#include <WebSocketsServer_Generic.h>
 
 #include <Adafruit_NeoPixel.h>  // For controling the Light Strip
 #include <ESP8266WiFi.h>        // For running the Web Server
@@ -25,15 +52,14 @@
 #define PIXEL_PIN    D6 //
 #define PIEZO_PIN  A0  // Piezo attached to Analog A0 on Wemos or Gemma D2 (A1)
 #define BUTTON_PIN D3 
-#define PIXEL_COUNT 13  // Number of NeoPixels
+#define PIXEL_COUNT 13  // Number of NeoPixels - is overridden by EEPROM value
 
 // Device Info
-const char* devicename = "DrumTest";
-const char* devicepassword = "redline1";
+const char* devicename = "DrumTest";  // This is overridden by EEPROM value
+const char* devicepassword = "pcepmbdl";
 
 // Declare NeoPixel strip object:
 // Adafruit_NeoPixel strip(PIXEL_COUNT, PIXEL_PIN, NEO_GRB + NEO_KHZ800);
-//Adafruit_NeoPixel strip;
 Adafruit_NeoPixel strip(PIXEL_COUNT, PIXEL_PIN, NEO_BRG + NEO_KHZ400); //<--- use this one
 
 // Argument 1 = Number of pixels in NeoPixel strip
@@ -66,81 +92,18 @@ uint8_t interruptDebounce = 150;
  
 // For Web Server
 ESP8266WebServer server(80);
-//WebSocketsServer webSocket = WebSocketsServer(81);
-//uint8_t connectedClient = 0;
-uint8_t connectedClients[20];
-uint8_t connectedClientCount = 0;
 
+// For drum-to-drum broadcast
 WiFiUDP broadcastUdp;
 unsigned int broadcastPort = 6789;
 IPAddress broadcastIp(192,168,1,255);
 char broadcastBuffer[UDP_TX_PACKET_MAX_SIZE];
 
-//void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length)
-//{
-//  switch (type)
-//  {
-//    case WStype_DISCONNECTED:
-//      Serial.printf("[%u] Disconnected!\n", num);
-//      break;
-//
-//    case WStype_CONNECTED:
-//      {
-//        IPAddress ip = webSocket.remoteIP(num);
-//        Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
-//        connectedClients[connectedClientCount] = num;
-//        Serial.printf("connectedClientCount is: %i, %i\n", connectedClients[connectedClientCount], connectedClientCount);
-//        // send message to client
-//        //webSocket.sendTXT(connectedClients[connectedClientCount], "Connected");
-//      }
-//      break;
-//    case WStype_TEXT:
-//      {
-//        StaticJsonDocument<200> requestDoc;
-//        DeserializationError error = deserializeJson(requestDoc, payload);
-//        //      DeserializationError error = deserializeJson(requestDoc, server.arg("plain"));
-//        if (error) {
-//          //      server.send(400, "text/plain", "Bad Request - Parsing JSON Body Failed");
-//          //      return false;
-//        }
-//   
-//        if (requestDoc.containsKey("drumId")) {
-//          myDrumLight.drumId = requestDoc["drumId"];
-//        }    
-//        if (requestDoc.containsKey("color")) {
-//          String colorStr = requestDoc["color"];
-//          myDrumLight.color = string2color(colorStr);
-//        }
-//        if (requestDoc.containsKey("threshold")) {
-//          myDrumLight.threshold = requestDoc["threshold"];
-//          //need to add bounds and error checking here
-//        }
-//        if (requestDoc.containsKey("brightness")) {
-//          myDrumLight.brightness = requestDoc["brightness"];
-//          setBrightnessValue(myDrumLight.brightness);
-//          //need to add bounds and error checking here
-//        }
-//        if (requestDoc.containsKey("delayValue")) {
-//          myDrumLight.drumId = requestDoc["delayValue"];
-//        }
-//        if (requestDoc.containsKey("triggerMode")) {
-//          myDrumLight.drumId = requestDoc["triggerMode"];
-//        }
-//        if (requestDoc.containsKey("getStatus")) {
-//            sendStatus();
-//        }
-//        if (requestDoc.containsKey("saveValues")) {
-//            saveValues();
-//        }
-//      }
-//      break;
-//
-//    default:
-//      break;
-//  }
-//}
 
-// Main Page
+// Main Page 
+// This is the HTML page that is loaded into PROGMEM and will be served up when a client connects.
+// It contains javascript functions that call rest APIs on the device when values are changed.
+
 static const char MAIN_PAGE[] PROGMEM = R"====(
 <HTML>
 <HEAD>
@@ -156,15 +119,6 @@ var delay_value = 20;
 var triggerMode = 0;
 
 var light_on = false;
-
-//in the process of removing the websockets
-//var connection = new WebSocket('ws://'+location.hostname+':81/', ['arduino']);
-//  
-//connection.onopen = function () {  connection.send('Connect ' + new Date()); }; 
-//connection.onerror = function (error) {    console.log('WebSocket Error ', error);};
-//connection.onmessage = function (e) {  
-//  statusLoaded(e.data);
-//  };
   
 //
 // Function to make a REST call
@@ -221,7 +175,6 @@ function statusLoaded(jsonResponse) {
 function initialStatusLoaded(jsonResponse) {
   console.log(jsonResponse);
   var obj = jsonResponse;
-//  var obj = JSON.parse(jsonResponse);
   drumId = obj.drumId;
   light_color = obj.color;
   light_brightness = obj.lightBrightness;
@@ -244,7 +197,6 @@ function initialStatusLoaded(jsonResponse) {
 function sendDelayValue() {
   var postObj = new Object();
   postObj.delayValue = document.getElementById('delayValue').value;
-//  connection.send(JSON.stringify(postObj));
   restCall('POST', '/delayValue', statusLoaded, JSON.stringify(postObj));  
 
 }
@@ -255,7 +207,6 @@ function sendDelayValue() {
 function sendDrumId() {
   var postObj = new Object();
   postObj.drumId = document.getElementById('drumIdCombo').value;
-//  connection.send(JSON.stringify(postObj));
   restCall('POST', '/drumID', statusLoaded, JSON.stringify(postObj));  
 
 }
@@ -268,7 +219,6 @@ function sendLightColor() {
   document.getElementById('color_label').innerHTML = color;
   var postObj = new Object();
   postObj.color = color;
-//  connection.send(JSON.stringify(postObj));
   restCall('POST', '/light', statusLoaded, JSON.stringify(postObj));  
 }
 
@@ -281,16 +231,6 @@ function saveValuesToEEPROM() {
   connection.send(JSON.stringify(postObj));
   restCall('POST', '/eeprom', statusLoaded, JSON.stringify(postObj));  
 }
-
-//
-// actions to perform when the page is loaded - this is the websocket version
-//
-//function doOnLoad() {
-//  var postObj = new Object();
-//  postObj.getStatus = 1;
-//  setTimeout(() => {connection.send(JSON.stringify(postObj));}, 1000)
-//}
-
 
 
 function sendBrightness() {  
@@ -321,6 +261,7 @@ function doOnLoad() {
   
 </SCRIPT>
 </HEAD>
+
 <BODY style='max-width: 960px; margin: auto;' onload='doOnLoad();'>
 
 Threshold is currently set to <span id='threshold_setpoint'></span><BR>
@@ -363,7 +304,7 @@ Brightness is currently set to <span id='brightness_label'></span><BR>
     Threshold: <input id="threshold" type="range" min="0" max="255" step="1" oninput="sendThreshold();" ><br>
   </DIV>
   <DIV>
-    <input type='button' id='eeprom_button' value="Save"; style='width: 160px; height: 40px; margin-bottom: 10px;' onClick='saveValuesToEEPROM();'><BR>
+    <input type='button' id='eeprom_button' value="Save to EEPROM"; style='width: 160px; height: 40px; margin-bottom: 10px;' onClick='saveValuesToEEPROM();'><BR>
   </DIV>
 </DIV>
 </form>
@@ -382,11 +323,6 @@ void setup() {
   //
   // Read saved values from the EEPROM
   //
-//  EEPROM.begin(sizeof(myDrumLight));
-//  char* myDrumLightBytes = reinterpret_cast<char*>(&myDrumLight);
-//  const uint32_t myDrumLightSize = sizeof(myDrumLight);
-//  
-//  EEPROM.begin(myDrumLightSize);  //Initialize EEPROM
   char* myDrumLightBytes = reinterpret_cast<char*>(&myDrumLight);
   const uint32_t myDrumLightSize = sizeof(myDrumLight);
   EEPROM.begin(myDrumLightSize);  
@@ -405,11 +341,16 @@ void setup() {
   Serial.printf("Pixel count value after EEPROM read: %i\n", myDrumLight.pixelCount);
   Serial.printf("MAC: ");
   Serial.println(WiFi.macAddress());
-  
+
+  //Set the device name to the one stored in EEPROM
   devicename = DrumText[myDrumLight.drumId];
+
+  
   strip.updateLength(myDrumLight.pixelCount);
   strip.begin(); // Initialize NeoPixel strip object (REQUIRED)
   strip.show();  // Initialize all pixels to 'off'
+  
+  
   ticker.attach(0.6, tick); // start ticker to slow blink LED strip during Setup
 
   //
@@ -420,7 +361,7 @@ void setup() {
   WiFiManager wm;
   // wm.resetSettings();    // reset settings - for testing
 
-  // Set static IP to see if it fixes my problem - joe
+  // Set static IP to get around WM not working for me
 //  IPAddress _ip = IPAddress(192, 168, 1, 13);
 //  IPAddress _gw = IPAddress(192, 168, 1, 1);
 //  IPAddress _sn = IPAddress(255, 255, 255, 0);
@@ -433,16 +374,12 @@ void setup() {
 //    //reset and try again, or maybe put it to deep sleep
 ////    ESP.restart();
 ////    delay(1000);
-//    WiFi.softAP(devicename, devicepassword);
 //  }
 //  Serial.println("connected");
 
+    //Since the WM code doesn't work on my network, I simply setup an AP
     WiFi.softAP(devicename, devicepassword);
 
-
-//  // start webSocket server
-//  webSocket.begin();
-//  webSocket.onEvent(webSocketEvent);
 
   //
   // Set up the Multicast DNS
@@ -493,6 +430,7 @@ void setup() {
   //
   // Setup Web Server
   //
+  // In the future, I'd combine these.
   server.on("/", handleRoot);
   server.on("/light", handleLight);
   server.on("/brightness", handleBrightness);
@@ -534,10 +472,8 @@ void loop() {
    case(setupMode):
         // Handle any requests
         ArduinoOTA.handle();
-//        webSocket.loop();
         server.handleClient();
         handleSensorReading();
-        //MDNS.update();
       break;
    case(broadcast):
       handleBroadcastMode();
@@ -548,10 +484,8 @@ void loop() {
    default:
         // Handle any requests
         ArduinoOTA.handle();
-//        webSocket.loop();
         server.handleClient();
         handleSensorReading();
-        //MDNS.update();
   }
 
 
@@ -659,16 +593,9 @@ void turnLightOff() {
 
 void setBrightnessValue(uint8_t bright_value) {
   int mappedValue = map(bright_value%255, 0, 100, 1, 254);
-  //gLightBrightness = mappedValue;
   myDrumLight.brightness = mappedValue;
   Serial.printf("Setting brightness value to %i, %i\n", myDrumLight.brightness, bright_value);
   strip.setBrightness(mappedValue);  //valid brightness values are 0<->255
-  
-  //Adding test websocket send code here
-  //char msg_buf[100];
-  //sprintf(msg_buf, "New Brightness value %d", mappedValue);
-  //Serial.printf("Sending to [%u]: %s\n", connectedClients[connectedClientCount], msg_buf);
-  //sendStatus();
 }
 
 
@@ -684,15 +611,14 @@ void colorSet(uint32_t color) {
 
 void saveValues() {
   Serial.println("Saving values to EEPROM");
-    char* myDrumLightBytes = reinterpret_cast<char*>(&myDrumLight);
-    const uint32_t myDrumLightSize = sizeof(myDrumLight);
+  char* myDrumLightBytes = reinterpret_cast<char*>(&myDrumLight);
+  const uint32_t myDrumLightSize = sizeof(myDrumLight);
 
   EEPROM.begin(myDrumLightSize);  //Initialize EEPROM
 
   for(int index = 0; index < myDrumLightSize; index++){
     EEPROM.write(index, myDrumLightBytes[index]);
   }
-  
   EEPROM.commit();    //Store data to EEPROM
 }
 
@@ -866,6 +792,7 @@ void handleDelayValue() {
       break;
   }
 } 
+
 //
 // Handle returning the status of the strip
 //
@@ -884,8 +811,6 @@ void sendStatus() {
   String payload;
   serializeJson(jsonDoc, payload);
   server.send(200, "application/json", payload);
-
-//  webSocket.sendTXT(connectedClients[0], payload);
 }
 
 //
@@ -908,7 +833,6 @@ boolean setLightColor() {
   }
   String colorStr = requestDoc["color"];
   myDrumLight.color = string2color(colorStr);
-  //sendStatus();
   return true;
 }
 
@@ -935,7 +859,6 @@ boolean setBrightness() {
   uint8_t brightnessValue = requestDoc["brightness"];
   setBrightnessValue(brightnessValue);
   strip.show();
-  //sendStatus();
   return true;
 }
 
